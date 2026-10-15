@@ -7,16 +7,20 @@ import { createClient } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 import { isFounderRequest, isValidFounderKey, requireFounder } from "@/lib/founder-auth"
 
-// Initialize Supabase client with service role for server-side operations
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Create the privileged client only when a request actually needs it. This keeps
+// the route buildable in previews where Supabase credentials may be unavailable.
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  return url && key ? createClient(url, key) : null
+}
 
 // POST — Save a published audit report (founder-only)
 export async function POST(request: NextRequest) {
   const denied = await requireFounder(request)
   if (denied) return denied
+  const supabase = getSupabase()
+  if (!supabase) return NextResponse.json({ error: "Supabase is not configured" }, { status: 503 })
 
   try {
     const body = await request.json()
@@ -57,6 +61,9 @@ export async function POST(request: NextRequest) {
 
 // GET — Load a published audit by ID, or list all audits
 export async function GET(request: NextRequest) {
+  const supabase = getSupabase()
+  if (!supabase) return NextResponse.json({ error: "Supabase is not configured" }, { status: 503 })
+
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
@@ -119,6 +126,9 @@ export async function PATCH(request: NextRequest) {
 
 // DELETE — Remove a published audit (founder-only)
 export async function DELETE(request: NextRequest) {
+  const supabase = getSupabase()
+  if (!supabase) return NextResponse.json({ error: "Supabase is not configured" }, { status: 503 })
+
   try {
     const { id, founderKey } = await request.json()
 
